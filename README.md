@@ -1,0 +1,2 @@
+# StatsModels
+Statistical Model exercises
