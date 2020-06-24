@@ -1,0 +1,265 @@
+---
+title: "LDA"
+author: "Josh Laven"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE,results='hide'}
+knitr::opts_chunk$set(error = TRUE)
+```
+
+```{r, echo=FALSE, include=FALSE,results='hide'}
+library(tm)
+library(magrittr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(wordcloud)
+library(wordcloud2)
+library(tidyverse)
+library(SnowballC)
+library(topicmodels)
+library(MASS)
+library(tidytext)
+library(ISLR)
+library(reshape2)
+library(e1071)
+library(plotrix)
+library(tidyr)
+
+```
+
+
+##NOTE to TAs: 
+Number 4 (a) and (b) ran in my markdown but for some reason would not knit to PDF,
+so I recreated the results table which is the output that answers the questions. I also
+attached my .rmd file.
+
+(a) Load the data as a corpus. For doing so, use the following command (leveraging the tm package)
+```{r}
+texts <- file.path(getwd(),"/SimpleText_auto") 
+docs <- VCorpus(DirSource(texts))
+
+#Check
+##writeLines(as.character(docs[1]))
+```
+
+(b) Clean the data. This implies transforming all characters to lowercase and removing stop words, punctuation, and any other words that will not generate meaningful content for identifying the topics. Think about words that are likely common in academic papers (e.g., table, figure, results). Also think about combining forms of the same word (e.g., genes and gene). Be sure to justify your decisions.
+```{r}
+#Clean
+
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, tolower)
+
+docs <- tm_map(docs,removeWords, stopwords("english"))
+
+other_stops <- c('table','figure','results','result','paper','study',
+                 'appendix','abstract','fig','can','also','used','number',
+                 'analysis','data','model','analyze','using','shown',
+                 'show','one','different','two','may','however','three')
+docs <- tm_map(docs,removeWords, other_stops)
+
+
+for (j in seq(docs)) {
+  docs[[j]] <- gsub("’", " ", docs[[j]])
+  docs[[j]] <- gsub("—", " ", docs[[j]])
+  docs[[j]] <- gsub("@", " ", docs[[j]])
+  docs[[j]] <- gsub("/", " ", docs[[j]])
+  docs[[j]] <- gsub('"', " ", docs[[j]])
+}
+
+docs <- tm_map(docs, PlainTextDocument)
+
+#Check
+##writeLines(as.character(docs[1]))
+```
+
+
+(c) Present the 50 most frequently used words in the corpus in an informative way. This can include a table of results or a word cloud.
+```{r}
+dtm <- DocumentTermMatrix(docs)
+
+tdm <- TermDocumentMatrix(docs)
+
+frequency <- sort(colSums(as.matrix(dtm)), 
+                  decreasing=TRUE)
+head(frequency)
+```
+```{r}
+word_df <- data.frame(Word = names(frequency),Frequency = frequency)
+word_df <- word_df[order(word_df$Frequency, decreasing = TRUE),]
+
+
+word50 <- word_df[1:50,]
+head(word50,10)
+```
+
+
+```{r}
+#Top 50 words
+
+word50_plot <- ggplot(word50, aes(x = reorder(Word, -Frequency), y = Frequency)) +
+  geom_col() +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=55, hjust=1))+
+  labs(x = "Word")
+
+word50_plot
+```
+
+
+```{r, warning=FALSE}
+#Wordcloud
+set.seed(1234)
+wordcloud50 <- wordcloud(word50$Word, word50$Frequency)
+```
+
+(d) Fit a topic model on the corpus setting k equal to 2, 3, 5, 8, and 10. Present the topics for each value of k and interpret the topics. In your opinion, which of the selected values of k yield the most meaningful coherence for each topic?
+
+The k=10 model seems to nicely separate the topics. From studying the k=10 graph, you can see there are topics regarding wind energy, microbiology, energy on the atomic level, and tempertaure/climate
+```{r}
+set.seed(1234)
+
+
+word_lda2 <- LDA(dtm, k = 2)
+word_lda3 <- LDA(dtm, k = 3)
+word_lda5 <- LDA(dtm, k = 5)
+word_lda8 <- LDA(dtm, k = 8)
+word_lda10 <- LDA(dtm, k = 10)
+
+
+```
+
+```{r}
+set.seed(1234)
+word_topics2 <- tidy(LDA(dtm,k=2),matrix='beta')
+word_topics3 <- tidy(LDA(dtm,k=3),matrix='beta')
+word_topics5 <- tidy(LDA(dtm,k=5),matrix='beta')
+word_topics8 <- tidy(LDA(dtm,k=8),matrix='beta')
+word_topics10 <- tidy(LDA(dtm,k=10),matrix='beta')
+
+```
+
+
+```{r}
+#K=2
+word_terms <- word_topics2 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+word_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+#K=3
+word_terms <- word_topics3 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+word_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+#K=5
+word_terms <- word_topics5 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+word_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+#K=8
+word_terms <- word_topics8 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+word_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+#K=10
+word_terms <- word_topics10 %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+word_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+```
+
+```{r}
+
+#Difference in probability of word assigned to topic
+
+beta_spread <- word_topics2 %>%
+  mutate(topic = paste0("topic", topic)) %>%
+  spread(topic, beta) %>%
+  filter(topic1 > .001 | topic2 > .001) %>%
+  mutate(log_ratio = log2(topic2 / topic1))
+
+beta_spread
+```
+
+
+
+(e) Optimize the hyperparameters of the LDA model using 10-fold cross-validation. Present the topics from the best model and explain your results. Hint: The topicmodels package may be helpful.
+
+```{r}
+
+burnin = 1000
+iter = 1000
+keep = 50
+n = nrow(dtm)
+kfolds = 10
+splitfolds <- sample(1:kfolds, n, replace = TRUE)
+tops <- 5
+
+results <-rep(NA,length(kfolds))
+
+for (i in 1:kfolds) {
+   train_set <- dtm[splitfolds != i , ]
+   valid_set <- dtm[splitfolds == i, ]
+   
+   fitted <- LDA(train_set, k = tops, method = "Gibbs",
+                 control = list(burnin = burnin, iter = iter, keep = keep))
+   results[i] <-perplexity(fitted, newdata = valid_set)
+}
+
+fitted_df <- as.data.frame(terms(fitted, dim(fitted)[1]))
+
+results_df <- as.data.frame(results)
+names(results_df)[1] <- "Perplexity of Each CV "
+results_df
+head(fitted_df,10)
+```
